@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.4/Chart.min.js"></script>
+
+    <script src="https://www.gstatic.com/firebasejs/10.3.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.3.1/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.3.1/firebase-auth-compat.js"></script>
+
+    <style>
+        h3#demo_tag {
+            text-align: center;
+            font-size: xx-large;
+            border-radius: 20px;
+            background-color: green;
+            width: fit-content;
+            margin: auto;
+            padding: 20px;
+        }
+
+        button#pushButton {
+            margin: auto;
+            text-align: center;
+            color: white;
+            background-color: black;
+            padding: 10px;
+        }
+
+        canvas#temperatureChart {
+            width: 80%;
+            margin: auto;
+        }
+    </style>
+</head>
+<body>
+    <h3 id="demo_tag">Drain Valve Status - <span id="drain_valve_status"></span></h3>
+    <button id="pushButton" onclick="button_click()">Change setting - this will update the database and the website will catch that change</button>
+    <canvas id="temperatureChart" width="400" height="200"></canvas>
+
+    <script>
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+  apiKey: "AIzaSyBxPYKe05ne4wlQjax83FAObgO2GyMXPSg",
+  authDomain: "senior-design-test-78c5a.firebaseapp.com",
+  databaseURL: "https://senior-design-test-78c5a-default-rtdb.firebaseio.com",
+  projectId: "senior-design-test-78c5a",
+  storageBucket: "senior-design-test-78c5a.appspot.com",
+  messagingSenderId: "149349172403",
+  appId: "1:149349172403:web:b8d92b6ae28945fc731cc6"
+};
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+
+        // Function to create and update the temperature graph
+        function createTemperatureGraph() {
+            var ctx = document.getElementById('temperatureChart').getContext('2d');
+
+            var chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],  // Labels will be added dynamically
+                    datasets: [{
+                        label: 'Temperature (°C)',
+                        borderColor: 'blue',
+                        data: [],  // Temperature data will be added here
+                    }],
+                },
+                options: {
+                    scales: {
+                        x: {
+                            type: 'time', // Use time scale for x-axis
+                            time: {
+                                unit: 'hour', // Display labels as hours in 24-hour format
+                                displayFormats: {
+                                    hour: 'HH:mm', // 24-hour format
+                                },
+                            },
+                            title: {
+                                display: true,
+                                text: 'Time', // X-axis title
+                            },
+                        },
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Temperature (°C)', // Y-axis title
+                            },
+                        },
+                    },
+                },
+            });
+
+            return chart;
+        }
+
+        // Function to update the temperature graph with new data
+        function updateTemperatureGraph(chart, labels, data) {
+            chart.data.labels = labels;
+            chart.data.datasets[0].data = data;
+            chart.update();
+        }
+
+        // Initialize the temperature graph
+        var temperatureChart = createTemperatureGraph();
+
+        // Function to handle new temperature data
+        function handleTemperatureData(snapshot) {
+            var labels = [];
+            var data = [];
+
+            snapshot.forEach(function(childSnapshot) {
+                var timestamp = childSnapshot.val().time;
+                var temperature = childSnapshot.val().temperature;
+
+                // Format the timestamp to a human-readable time in 24-hour format
+                var formattedTimestamp = new Date(timestamp * 1000).toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+
+                labels.push(formattedTimestamp); // Use the formatted timestamp
+                data.push(temperature);
+            });
+
+            // Update the temperature graph with new data
+            updateTemperatureGraph(temperatureChart, labels, data);
+        }
+
+        // Reference to the 'temperature_data' location in the database
+        var temperatureRef = firebase.database().ref("temperature_data");
+
+        // Listen for changes in the database and update the graph
+        temperatureRef.on("value", function(snapshot) {
+            handleTemperatureData(snapshot);
+        });
+
+        // Start of reading database values
+        // Reference to the 'controls' location in the database
+        var control_values = firebase.database().ref("controls/drain_valve");
+
+        // Listen for new child nodes being added
+        control_values.on("child_added", function(snapshot) {
+            snapshot.forEach(function(childSnapshot) {
+                var valueKey = childSnapshot.key;
+                var valueData = childSnapshot.val();
+                if (valueKey == "setting") {
+                    document.getElementById('drain_valve_status').innerHTML = valueData;
+                    if (valueData == "low") {
+                        document.getElementById('demo_tag').style.backgroundColor = "green";
+                    } else {
+                        document.getElementById('demo_tag').style.backgroundColor = "red";
+                    }
+                }
+            });
+        });
+
+        // Function to handle button click and update the database
+        function button_click() {
+            // Toggle back and forth between high and low
+            if (document.getElementById('drain_valve_status').innerHTML == 'low') {
+                status = 'high';
+            } else {
+                status = 'low';
+            }
+            console.log(status);
+            // Get the current Unix timestamp in seconds
+            var currentUnixTimestamp = Math.floor(Date.now() / 1000);
+
+            // Reference to the drain valve control location in the database
+            var messagesRef = firebase.database().ref("controls/drain_valve");
+
+            var newValue = messagesRef.push();
+            newValue.set({
+                time: currentUnixTimestamp,
+                setting: status
+            });
+        }
+        // End of writing to database
+    </script>
+</body>
+</html>
